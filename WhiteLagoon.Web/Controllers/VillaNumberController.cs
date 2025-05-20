@@ -48,7 +48,7 @@ namespace WhiteLagoon.Web.Controllers
                 _db.VillaNumbers.Add(villaNumberVM.VillaNumber);
                 _db.SaveChanges();
                 TempData["success"] = "The villa number created successfully!";
-                return RedirectToAction("Index");
+                return RedirectToAction(nameof(Index));
             }
 
             villaNumberVM.VillaList = _db.Villas.ToList().Select(x => new SelectListItem
@@ -85,7 +85,7 @@ namespace WhiteLagoon.Web.Controllers
                 _db.VillaNumbers.Update(villaNumberVM.VillaNumber);
                 _db.SaveChanges();
                 TempData["success"] = "The villa number updated successfully!";
-                return RedirectToAction("Index");
+                return RedirectToAction(nameof(Index));
             }
 
             villaNumberVM.VillaList = _db.Villas.ToList().Select(x => new SelectListItem
@@ -94,6 +94,39 @@ namespace WhiteLagoon.Web.Controllers
                 Value = x.Id.ToString()
             });
             return View(villaNumberVM);
+        }
+
+        public IActionResult Delete(int villaNumberId)
+        {
+            VillaNumberVM villaNumberVM = new()
+            {
+                VillaList = _db.Villas.ToList().Select(x => new SelectListItem
+                {
+                    Text = x.Name,
+                    Value = x.Id.ToString()
+                }),
+                VillaNumber = _db.VillaNumbers.FirstOrDefault(x => x.Villa_Number.Equals(villaNumberId))
+            };
+            if (villaNumberVM is null)
+            {
+                return RedirectToAction("Error", "Home");
+            }
+            return View(villaNumberVM);
+        }
+
+        [HttpPost]
+        public IActionResult Delete(VillaNumberVM villaNumberVM)
+        {
+            VillaNumber? villaNumberFromDb = _db.VillaNumbers.Find(villaNumberVM.VillaNumber.Villa_Number);
+            if (villaNumberFromDb is not null)
+            {
+                _db.VillaNumbers.Remove(villaNumberFromDb);
+                _db.SaveChanges();
+                TempData["success"] = "The villa number deleted successfully!";
+                return RedirectToAction(nameof(Index));
+            }
+            TempData["error"] = "The villa number could not be deleted!";
+            return View();
         }
     }
 }
