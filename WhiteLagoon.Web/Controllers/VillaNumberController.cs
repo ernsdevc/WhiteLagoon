@@ -58,5 +58,42 @@ namespace WhiteLagoon.Web.Controllers
             });
             return View(villaNumberVM);
         }
+
+        public IActionResult Update(int villaNumberId)
+        {
+            VillaNumberVM villaNumberVM = new()
+            {
+                VillaList = _db.Villas.ToList().Select(x => new SelectListItem
+                {
+                    Text = x.Name,
+                    Value = x.Id.ToString()
+                }),
+                VillaNumber = _db.VillaNumbers.FirstOrDefault(x => x.Villa_Number.Equals(villaNumberId))
+            };
+            if (villaNumberVM is null)
+            {
+                return RedirectToAction("Error", "Home");
+            }
+            return View(villaNumberVM);
+        }
+
+        [HttpPost]
+        public IActionResult Update(VillaNumberVM villaNumberVM)
+        {
+            if (ModelState.IsValid)
+            {
+                _db.VillaNumbers.Update(villaNumberVM.VillaNumber);
+                _db.SaveChanges();
+                TempData["success"] = "The villa number updated successfully!";
+                return RedirectToAction("Index");
+            }
+
+            villaNumberVM.VillaList = _db.Villas.ToList().Select(x => new SelectListItem
+            {
+                Text = x.Name,
+                Value = x.Id.ToString()
+            });
+            return View(villaNumberVM);
+        }
     }
 }
