@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using WhiteLagoon.Application.Common.Interfaces;
 using WhiteLagoon.Domain.Entities;
 using WhiteLagoon.Infrastructure.Data;
 
@@ -6,16 +7,16 @@ namespace WhiteLagoon.Web.Controllers
 {
     public class VillaController : Controller
     {
-        private readonly ApplicationDbContext _db;
+        private readonly IVillaRepository _villaRepository;
 
-        public VillaController(ApplicationDbContext db)
+        public VillaController(IVillaRepository villaRepository)
         {
-            _db = db;
+            _villaRepository = villaRepository;
         }
 
         public IActionResult Index()
         {
-            var villas = _db.Villas.ToList();
+            var villas = _villaRepository.GetAll();
             return View(villas);
         }
 
@@ -33,8 +34,8 @@ namespace WhiteLagoon.Web.Controllers
             }
             if (ModelState.IsValid)
             {
-                _db.Villas.Add(villa);
-                _db.SaveChanges();
+                _villaRepository.Add(villa);
+                _villaRepository.Save();
                 TempData["success"] = "The villa created successfully!";
                 return RedirectToAction(nameof(Index));
             }
@@ -43,7 +44,7 @@ namespace WhiteLagoon.Web.Controllers
 
         public IActionResult Update(int villaId)
         {
-            Villa? villa = _db.Villas.Find(villaId);
+            Villa? villa = _villaRepository.Get(x => x.Id.Equals(villaId));
             if (villa is null)
             {
                 return RedirectToAction("Error", "Home");
@@ -56,8 +57,8 @@ namespace WhiteLagoon.Web.Controllers
         {
             if (ModelState.IsValid && villa.Id > 0)
             {
-                _db.Villas.Update(villa);
-                _db.SaveChanges();
+                _villaRepository.Update(villa);
+                _villaRepository.Save();
                 TempData["success"] = "The villa updated successfully!";
                 return RedirectToAction(nameof(Index));
             }
@@ -66,7 +67,7 @@ namespace WhiteLagoon.Web.Controllers
 
         public IActionResult Delete(int villaId)
         {
-            Villa? villa = _db.Villas.Find(villaId);
+            Villa? villa = _villaRepository.Get(x => x.Id.Equals(villaId));
             if (villa is null)
             {
                 return RedirectToAction("Error", "Home");
@@ -77,11 +78,11 @@ namespace WhiteLagoon.Web.Controllers
         [HttpPost]
         public IActionResult Delete(Villa villa)
         {
-            Villa? villaFromDb = _db.Villas.Find(villa.Id);
+            Villa? villaFromDb = _villaRepository.Get(x => x.Id.Equals(villa.Id));
             if (villaFromDb is not null)
             {
-                _db.Villas.Remove(villaFromDb);
-                _db.SaveChanges();
+                _villaRepository.Remove(villaFromDb);
+                _villaRepository.Save();
                 TempData["success"] = "The villa deleted successfully!";
                 return RedirectToAction(nameof(Index));
             }
