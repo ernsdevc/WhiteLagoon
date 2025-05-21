@@ -35,7 +35,7 @@ namespace WhiteLagoon.Web.Controllers
             if (ModelState.IsValid)
             {
                 _unitOfWork.Villa.Add(villa);
-                _unitOfWork.Villa.Save();
+                _unitOfWork.Save();
                 TempData["success"] = "The villa created successfully!";
                 return RedirectToAction(nameof(Index));
             }
@@ -58,7 +58,7 @@ namespace WhiteLagoon.Web.Controllers
             if (ModelState.IsValid && villa.Id > 0)
             {
                 _unitOfWork.Villa.Update(villa);
-                _unitOfWork.Villa.Save();
+                _unitOfWork.Save();
                 TempData["success"] = "The villa updated successfully!";
                 return RedirectToAction(nameof(Index));
             }
@@ -82,7 +82,7 @@ namespace WhiteLagoon.Web.Controllers
             if (villaFromDb is not null)
             {
                 _unitOfWork.Villa.Remove(villaFromDb);
-                _unitOfWork.Villa.Save();
+                _unitOfWork.Save();
                 TempData["success"] = "The villa deleted successfully!";
                 return RedirectToAction(nameof(Index));
             }
