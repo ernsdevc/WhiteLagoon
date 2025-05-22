@@ -11,39 +11,44 @@
     <div class="card-body border p-4">
         <form method="post" class="row">
             <input asp-for="Id" hidden />
-            <div class="p-3">
-                <div class="form-floating py-2 col-12">
-                    <input disabled class="form-control border shadow" asp-for="Name" />
-                    <label asp-for="Name" class="ms-2"></label>
-                </div>
-                <div class="form-floating py-2 col-12">
-                    <input disabled class="form-control border shadow" asp-for="Description" />
-                    <label asp-for="Description" class="ms-2"></label>
-                </div>
-                <div class="form-floating py-2 col-12">
-                    <input disabled class="form-control border shadow" asp-for="Price" />
-                    <label asp-for="Price" class="ms-2"></label>
-                </div>
-                <div class="form-floating py-2 col-12">
-                    <input disabled class="form-control border shadow" asp-for="Sqft" />
-                    <label asp-for="Sqft" class="ms-2"></label>
-                </div>
-                <div class="form-floating py-2 col-12">
-                    <input disabled class="form-control border shadow" asp-for="Occupancy" />
-                    <label asp-for="Occupancy" class="ms-2"></label>
-                </div>
-                <div class="form-floating py-2 col-12">
-                    <input disabled class="form-control border shadow" asp-for="ImageUrl" />
-                    <label asp-for="ImageUrl" class="ms-2"></label>
-                </div>
-                <div class="row pt-2">
-                    <div class="col-6 col-md-3">
-                        <button type="submit" class="btn btn-outline-dark w-100"><i class="bi bi-trash-fill"></i> Delete</button>
+            <div class="col-10">
+                <div class="p-3">
+                    <div class="form-floating py-2 col-12">
+                        <input disabled class="form-control border shadow" asp-for="Name" />
+                        <label asp-for="Name" class="ms-2"></label>
                     </div>
-                    <div class="col-6 col-md-3">
-                        <a asp-controller="Villa" asp-action="Index" class="btn btn-outline-danger w-100"><i class="bi bi-x-circle"></i> Cancel</a>
+                    <div class="form-floating py-2 col-12">
+                        <input disabled class="form-control border shadow" asp-for="Description" />
+                        <label asp-for="Description" class="ms-2"></label>
+                    </div>
+                    <div class="form-floating py-2 col-12">
+                        <input disabled class="form-control border shadow" asp-for="Price" />
+                        <label asp-for="Price" class="ms-2"></label>
+                    </div>
+                    <div class="form-floating py-2 col-12">
+                        <input disabled class="form-control border shadow" asp-for="Sqft" />
+                        <label asp-for="Sqft" class="ms-2"></label>
+                    </div>
+                    <div class="form-floating py-2 col-12">
+                        <input disabled class="form-control border shadow" asp-for="Occupancy" />
+                        <label asp-for="Occupancy" class="ms-2"></label>
+                    </div>
+                    <div class="form-floating py-2 col-12">
+                        <input disabled class="form-control border shadow" asp-for="ImageUrl" />
+                        <label asp-for="ImageUrl" class="ms-2"></label>
+                    </div>
+                    <div class="row pt-2">
+                        <div class="col-6 col-md-3">
+                            <button type="submit" class="btn btn-outline-dark w-100"><i class="bi bi-trash-fill"></i> Delete</button>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <a asp-controller="Villa" asp-action="Index" class="btn btn-outline-danger w-100"><i class="bi bi-x-circle"></i> Cancel</a>
+                        </div>
                     </div>
                 </div>
+            </div>
+            <div class="col-2">
+                <img src="@Model.ImageUrl" width="100%" style="border-radius:5px; border:1px solid #bbb9b9" />
             </div>
         </form>
     </div>
