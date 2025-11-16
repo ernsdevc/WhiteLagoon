@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Stripe;
 using Stripe.Checkout;
@@ -11,19 +12,30 @@ using System.Globalization;
 using System.Security.Claims;
 using WhiteLagoon.Application.Common.Interfaces;
 using WhiteLagoon.Application.Common.Utility;
+using WhiteLagoon.Application.Contract;
+using WhiteLagoon.Application.Services.Interface;
 using WhiteLagoon.Domain.Entities;
+using WhiteLagoon.Infrastructure.Repository;
 
 namespace WhiteLagoon.Web.Controllers
 {
     public class BookingController : Controller
     {
-        private readonly IUnitOfWork _unitOfWork;
+        private readonly IBookingService _bookingService;
+        private readonly IVillaService _villaService;
+        private readonly IVillaNumberService _villaNumberService;
         private readonly IWebHostEnvironment _webHostEnvironment;
+        private readonly IEmailService _emailService;
+        private readonly UserManager<ApplicationUser> _userManager;
 
-        public BookingController(IUnitOfWork unitOfWork, IWebHostEnvironment webHostEnvironment)
+        public BookingController(IBookingService bookingService, IVillaService villaService, IVillaNumberService villaNumberService, IWebHostEnvironment webHostEnvironment, UserManager<ApplicationUser> userManager, IEmailService emailService)
         {
-            _unitOfWork = unitOfWork;
+            _bookingService = bookingService;
+            _villaService = villaService;
+            _villaNumberService = villaNumberService;
             _webHostEnvironment = webHostEnvironment;
+            _userManager = userManager;
+            _emailService = emailService;
         }
 
         [Authorize]
@@ -38,12 +50,12 @@ namespace WhiteLagoon.Web.Controllers
             var claimsIdentity = (ClaimsIdentity)User.Identity;
             var userId = claimsIdentity.FindFirst(ClaimTypes.NameIdentifier).Value;
 
-            ApplicationUser user = _unitOfWork.User.Get(x => x.Id.Equals(userId));
+            ApplicationUser user = _userManager.FindByIdAsync(userId).GetAwaiter().GetResult();
 
             Booking booking = new Booking
             {
                 VillaId = villaId,
-                Villa = _unitOfWork.Villa.Get(x => x.Id.Equals(villaId), includeProperties: "VillaAmenity"),
+                Villa = _villaService.GetVillaById(villaId),
                 CheckInDate = checkInDate,
                 Nights = nights,
                 CheckOutDate = checkInDate.AddDays(nights),
@@ -60,18 +72,12 @@ namespace WhiteLagoon.Web.Controllers
         [HttpPost]
         public IActionResult FinalizeBooking(Booking booking)
         {
-            var villa = _unitOfWork.Villa.Get(x => x.Id.Equals(booking.VillaId));
+            var villa = _villaService.GetVillaById(booking.VillaId);
             booking.TotalCost = villa.Price * booking.Nights;
             booking.Status = SD.StatusPending;
             booking.BookingDate = DateTime.Now;
 
-            var villaNumberList = _unitOfWork.VillaNumber.GetAll().ToList();
-            var bookedVillas = _unitOfWork.Booking.GetAll(b => b.Status.Equals(SD.StatusApproved) || b.Status.Equals(SD.StatusCheckedIn)).ToList();
-            
-            int roomAvailable = SD.VillaRoomsAvailable_Count(villa.Id, villaNumberList, booking.CheckInDate, booking.Nights, bookedVillas);
-            villa.IsAvailable = roomAvailable > 0 ? true : false;
-
-            if (roomAvailable == 0)
+            if (!_villaService.IsVillaAvailableByDate(villa.Id, booking.Nights, booking.CheckInDate))
             {
                 TempData["error"] = "Room has been sold out!";
                 return RedirectToAction(nameof(FinalizeBooking), new
@@ -82,8 +88,7 @@ namespace WhiteLagoon.Web.Controllers
                 });
             }
 
-            _unitOfWork.Booking.Add(booking);
-            _unitOfWork.Save();
+            _bookingService.CreateBooking(booking);
 
             var domain = Request.Scheme + "://" + Request.Host.Value + "/";
             var options = new SessionCreateOptions
@@ -112,8 +117,7 @@ namespace WhiteLagoon.Web.Controllers
             var service = new SessionService();
             Session session = service.Create(options);
 
-            _unitOfWork.Booking.UpdateStripePaymentId(booking.Id, session.Id, session.PaymentIntentId);
-            _unitOfWork.Save();
+            _bookingService.UpdateStripePaymentId(booking.Id, session.Id, session.PaymentIntentId);
 
             Response.Headers.Add("Location", session.Url);
             return new StatusCodeResult(303);
@@ -122,7 +126,7 @@ namespace WhiteLagoon.Web.Controllers
         [Authorize]
         public IActionResult BookingConfirmation(int bookingId)
         {
-            Booking bookingFromDb = _unitOfWork.Booking.Get(x => x.Id.Equals(bookingId), includeProperties: "User,Villa");
+            Booking bookingFromDb = _bookingService.GetBookingById(bookingId);
 
             if (bookingFromDb.Status.Equals(SD.StatusPending))
             {
@@ -131,9 +135,10 @@ namespace WhiteLagoon.Web.Controllers
 
                 if (session.PaymentStatus.Equals("paid"))
                 {
-                    _unitOfWork.Booking.UpdateStatus(bookingFromDb.Id, SD.StatusApproved, 0);
-                    _unitOfWork.Booking.UpdateStripePaymentId(bookingFromDb.Id, session.Id, session.PaymentIntentId);
-                    _unitOfWork.Save();
+                    _bookingService.UpdateStatus(bookingFromDb.Id, SD.StatusApproved, 0);
+                    _bookingService.UpdateStripePaymentId(bookingFromDb.Id, session.Id, session.PaymentIntentId);
+
+                    _emailService.SendEmailAsync(bookingFromDb.Email, "Booking Confirmation - White Lagoon", "<p>Your booking has been confirmed successfully!</p><p>Booking ID: " + bookingFromDb.Id);
                 }
             }
 
@@ -143,12 +148,12 @@ namespace WhiteLagoon.Web.Controllers
         [Authorize]
         public IActionResult BookingDetails(int bookingId)
         {
-            Booking bookingFromDb = _unitOfWork.Booking.Get(x => x.Id.Equals(bookingId), includeProperties: "User,Villa");
+            Booking bookingFromDb = _bookingService.GetBookingById(bookingId);
             if (bookingFromDb.VillaNumber == 0 && bookingFromDb.Status.Equals(SD.StatusApproved))
             {
                 var availableVillaNumbers = AssignAvailableVillaNumberByVilla(bookingFromDb.VillaId);
 
-                bookingFromDb.VillaNumbers = _unitOfWork.VillaNumber.GetAll(vn => vn.VillaId.Equals(bookingFromDb.VillaId) && availableVillaNumbers.Any(x => x.Equals(vn.Villa_Number))).ToList();
+                bookingFromDb.VillaNumbers = _villaNumberService.GetAllVillaNumbers().Where(vn => vn.VillaId.Equals(bookingFromDb.VillaId) && availableVillaNumbers.Any(x => x.Equals(vn.Villa_Number))).ToList();
             }
             return View(bookingFromDb);
         }
@@ -165,7 +170,7 @@ namespace WhiteLagoon.Web.Controllers
             using FileStream fileStream = new (dataPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             document.Open(fileStream, FormatType.Automatic);
 
-            Booking bookingFromDb = _unitOfWork.Booking.Get(b => b.Id.Equals(id), includeProperties: "User,Villa");
+            Booking bookingFromDb = _bookingService.GetBookingById(id);
 
             TextSelection textSelection = document.Find("xx_customer_name", false, true);
             WTextRange textRange = textSelection.GetAsOneRange();
@@ -285,9 +290,9 @@ namespace WhiteLagoon.Web.Controllers
         {
             List<int> availableVillaNumbers = new();
 
-            var villaNumbers = _unitOfWork.VillaNumber.GetAll(x => x.VillaId.Equals(villaId));
+            var villaNumbers = _villaNumberService.GetAllVillaNumbers().Where(x => x.VillaId.Equals(villaId));
 
-            var checkedInVillas = _unitOfWork.Booking.GetAll(b => b.VillaId.Equals(villaId) && b.Status.Equals(SD.StatusCheckedIn)).Select(b => b.VillaNumber);
+            var checkedInVillas = _bookingService.GetCheckedInVillaNumbers(villaId);
 
             foreach (var villaNumber in villaNumbers)
             {
@@ -303,8 +308,7 @@ namespace WhiteLagoon.Web.Controllers
         [Authorize(Roles = SD.Role_Admin)]
         public IActionResult CheckIn(Booking booking)
         {
-            _unitOfWork.Booking.UpdateStatus(booking.Id, SD.StatusCheckedIn, booking.VillaNumber);
-            _unitOfWork.Save();
+            _bookingService.UpdateStatus(booking.Id, SD.StatusCheckedIn, booking.VillaNumber);
             TempData["success"] = "Booking Updated Successfully";
             return RedirectToAction(nameof(BookingDetails), new { bookingId = booking.Id });
         }
@@ -313,8 +317,7 @@ namespace WhiteLagoon.Web.Controllers
         [Authorize(Roles = SD.Role_Admin)]
         public IActionResult CheckOut(Booking booking)
         {
-            _unitOfWork.Booking.UpdateStatus(booking.Id, SD.StatusCompleted, booking.VillaNumber);
-            _unitOfWork.Save();
+            _bookingService.UpdateStatus(booking.Id, SD.StatusCompleted, booking.VillaNumber);
             TempData["success"] = "Booking Completed Successfully";
             return RedirectToAction(nameof(BookingDetails), new { bookingId = booking.Id });
         }
@@ -323,8 +326,7 @@ namespace WhiteLagoon.Web.Controllers
         [Authorize(Roles = SD.Role_Admin)]
         public IActionResult CancelBooking(Booking booking)
         {
-            _unitOfWork.Booking.UpdateStatus(booking.Id, SD.StatusCancelled, 0);
-            _unitOfWork.Save();
+            _bookingService.UpdateStatus(booking.Id, SD.StatusCheckedIn, booking.VillaNumber);
             TempData["success"] = "Booking Cancelled Successfully";
             return RedirectToAction(nameof(BookingDetails), new { bookingId = booking.Id });
         }
@@ -336,21 +338,19 @@ namespace WhiteLagoon.Web.Controllers
         public IActionResult GetAll(string status)
         {
             IEnumerable<Booking> bookings;
-
-            if (User.IsInRole(SD.Role_Admin))
+            string userId = "";
+            if (string.IsNullOrEmpty(userId))
             {
-                bookings = _unitOfWork.Booking.GetAll(includeProperties: "User,Villa");
+                status = "";
             }
-            else
+            if (!User.IsInRole(SD.Role_Admin))
             {
                 var claimsIdentity = (ClaimsIdentity)User.Identity;
-                var userId = claimsIdentity.FindFirst(ClaimTypes.NameIdentifier).Value;
-                bookings = _unitOfWork.Booking.GetAll(x => x.UserId.Equals(userId), includeProperties: "User,Villa");
+                userId = claimsIdentity.FindFirst(ClaimTypes.NameIdentifier).Value;
             }
-            if (!string.IsNullOrEmpty(status))
-            {
-                bookings = bookings.Where(x => x.Status.ToLower().Equals(status.ToLower()));
-            }
+
+            bookings = _bookingService.GetAllBookings(userId, status);
+
             return Json(new { data = bookings });
         }
 
